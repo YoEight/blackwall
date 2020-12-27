@@ -1,4 +1,4 @@
-use glfw::{Action, Context, Key};
+use glfw::{Action, Context};
 
 pub struct BWContext {
     context: glfw::Glfw,
@@ -50,7 +50,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn run(mut self) {
+    pub fn run<D: Driver>(mut self, mut driver: D) {
         while !self.window.should_close() {
             for (_, event) in glfw::flush_messages(&self.events) {
                 match event {
@@ -58,21 +58,62 @@ impl App {
                         gl::Viewport(0, 0, width, height)
                     },
 
-                    glfw::WindowEvent::Key(Key::Escape, _, Action::Release, _) => {
-                        self.window.set_should_close(true)
-                    }
+                    glfw::WindowEvent::Key(key, code, action, modifiers) => {
+                        let key = Key {
+                            inner: key,
+                            code,
+                            modifiers,
+                        };
 
-                    // Welcome to Linux where Wayland isn't even detecting that Escape properly.
-                    glfw::WindowEvent::Key(_, 9, Action::Release, _) => {
-                        self.window.set_should_close(true)
+                        let run = if let glfw::Action::Press = action {
+                            driver.key_pressed(key)
+                        } else {
+                            driver.key_released(key)
+                        };
+
+                        if let Run::Quit = run {
+                            self.window.set_should_close(true);
+                        }
                     }
 
                     _ => {}
                 }
             }
 
+            driver.render();
+
             self.window.swap_buffers();
             self.context.context.poll_events();
         }
+    }
+}
+
+pub enum Run {
+    Continue,
+    Quit,
+}
+
+pub struct Key {
+    inner: glfw::Key,
+    code: glfw::Scancode,
+    modifiers: glfw::Modifiers,
+}
+
+impl Key {
+    pub fn is_escape(&self) -> bool {
+        // Welcome to Linux where Wayland isn't even detecting that Escape properly.
+        self.inner == glfw::Key::Escape || self.code == 9
+    }
+}
+
+pub trait Driver {
+    fn render(&self);
+
+    fn key_released(&mut self, key: Key) -> Run {
+        Run::Continue
+    }
+
+    fn key_pressed(&mut self, key: Key) -> Run {
+        Run::Continue
     }
 }
